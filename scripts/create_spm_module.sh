@@ -137,11 +137,11 @@ cat > Example/Info/Info.plist <<EOF
 <plist version="1.0">
   <dict>
       <key>CFBundleIdentifier</key>
-      <string>com.geopagos.AuthTestExample</string>
+      <string>com.geopagos.${MODULE_NAME}Example</string>
       <key>CFBundleName</key>
-      <string>AuthTestExample</string>
+      <string>${MODULE_NAME}Example</string>
       <key>CFBundleExecutable</key>
-      <string>AuthTestExample</string>
+      <string>${MODULE_NAME}Example</string>
       <key>CFBundleVersion</key>
       <string>1.0</string>
       <key>CFBundleShortVersionString</key>
