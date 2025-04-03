@@ -1,6 +1,7 @@
-# iOS SPM Module Generator
+# Creación de Módulos SPM con create_spm_module.sh
 
-Este repositorio contiene un script en Bash para generar nuevos módulos basados en Swift Package Manager (SPM). Con este script, podrás crear de forma rápida la estructura básica de un paquete Swift, facilitando la estandarización y generación de nuevos módulos en tu monorepo.
+Este script automatiza la creación de un módulo Swift Package Manager (SPM) junto con un Example App que integra el módulo como dependencia. El Example App se genera usando XcodeGen.
+
 
 ## Contenido
 
@@ -9,9 +10,9 @@ Este repositorio contiene un script en Bash para generar nuevos módulos basados
 
 ## Requisitos
 
-- **Swift:** Se requiere Swift 5.3 o superior.
-- **Bash:** El script está escrito en Bash (compatible con macOS, Linux y otros entornos Unix-like).
-- **Conexión a Internet:** Solo es necesaria si deseas ejecutar el script directamente desde GitHub.
+- Swift 5.3 o superior.
+- XcodeGen (el script lo instalará vía Homebrew si no se encuentra).
+- (Opcional) La utilidad tree para visualizar la estructura del proyecto.
 
 ## Uso
 
