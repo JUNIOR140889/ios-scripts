@@ -25,7 +25,7 @@ declare -A PARTNER_TARGET_MAP=(
   [compraqui]="compraqui"
 )
 
-# 🧪 Validar cantidad de argumentos
+# 🧪 Validar argumentos
 if [ "$#" -ne 2 ]; then
   echo "❌ Uso: $0 <PartnerName> <Environment>"
   echo "Ejemplo: $0 UalaBis Release"
@@ -34,28 +34,39 @@ fi
 
 PARTNER="$1"
 ENVIRONMENT="$2"
+WORKSPACE="GoPagos.xcworkspace"
+TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
+SCHEME="$TARGET"
+APP_NAME="$TARGET"
+IPA_NAME="${PARTNER}.ipa"
+BUILD_DIR="build"
 
 # 🚨 Validar partner
-TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
 if [ -z "$TARGET" ]; then
   echo "❌ Partner inválido: '$PARTNER'"
   echo "Partners disponibles: ${!PARTNER_TARGET_MAP[@]}"
   exit 1
 fi
 
-# 🚀 CONFIGURACIÓN
-WORKSPACE="GoPagos.xcworkspace"
-SCHEME="$TARGET"
-APP_NAME="$TARGET"
-IPA_NAME="${PARTNER}.ipa"
-BUILD_DIR="build"
+# ✅ Validar que el scheme exista en el workspace
+echo "🔍 Verificando que '$SCHEME' exista en $WORKSPACE..."
+if ! xcodebuild -workspace "$WORKSPACE" -list | grep -q "^[[:space:]]*$SCHEME$"; then
+  echo "❌ El scheme '$SCHEME' no existe en $WORKSPACE."
+  exit 1
+fi
 
-# 🧼 LIMPIAR
+# 🧼 Limpiar
 echo "🧹 Limpiando build anterior..."
 rm -rf "$BUILD_DIR"
 
-# ⚙️ COMPILAR SIN FIRMA
-echo "⚙️ Compilando '$PARTNER' con configuración '$ENVIRONMENT' sin firma..."
+# 🧪 Mostrar configuración usada
+echo "🧪 Ejecutando build con:"
+echo "  Workspace: $WORKSPACE"
+echo "  Scheme:    $SCHEME"
+echo "  Target:    $TARGET"
+echo "  Config:    $ENVIRONMENT"
+
+# ⚙️ Compilar sin firmar
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
@@ -68,26 +79,32 @@ xcodebuild \
   CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
   build
 
-# 🧾 Validar .app generado
+# ❌ Cortar si falla la build
+if [ $? -ne 0 ]; then
+  echo "❌ Error: Falló la compilación. Abortando."
+  exit 1
+fi
+
+# ✅ Validar que se haya generado el .app
 APP_PATH="$BUILD_DIR/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then
   echo "❌ No se encontró $APP_NAME.app en $BUILD_DIR"
   exit 1
 fi
 
-# 🔢 Obtener versión
+# 🔢 Obtener versión desde Info.plist
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Info.plist" 2>/dev/null)
 if [ -z "$VERSION" ]; then
   VERSION="unknown"
   echo "⚠️ No se pudo leer CFBundleShortVersionString, usando 'unknown'"
 fi
 
-# 📁 Carpeta destino en el Escritorio
+# 📁 Ruta de artefactos en el escritorio
 ARTIFACTS_DIR="$HOME/Desktop/${PARTNER}-${VERSION}-${ENVIRONMENT}"
 README_PATH="$ARTIFACTS_DIR/README.txt"
 mkdir -p "$ARTIFACTS_DIR"
 
-# 📦 Crear .ipa
+# 📦 Empaquetar .ipa
 echo "📦 Empaquetando .ipa sin firmar..."
 mkdir -p Payload
 cp -r "$APP_PATH" Payload/
@@ -144,13 +161,14 @@ Opción 2: Manual con Xcode (Avanzado)
 Contactar al equipo técnico que entregó el artefacto si tienen dudas sobre la firma o el uso.
 EOF
 
-# 🗜️ ZIP final
+# 🗜️ Comprimir .zip
 ZIP_NAME="${ARTIFACTS_DIR}.zip"
 cd "$HOME/Desktop"
 zip -r "$(basename "$ZIP_NAME")" "$(basename "$ARTIFACTS_DIR")" > /dev/null
 cd - > /dev/null
 
-# 📂 Abrir carpeta
+# 📂 Abrir en Finder
 open "$ARTIFACTS_DIR"
 
 echo "✅ Listo: $ARTIFACTS_DIR y $(basename "$ZIP_NAME") creados en tu Escritorio."
+
