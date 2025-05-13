@@ -35,38 +35,43 @@ fi
 PARTNER="$1"
 ENVIRONMENT="$2"
 WORKSPACE="GoPagos.xcworkspace"
+
+# 🔐 Validar existencia del partner en el mapping
 TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
+if [ -z "$TARGET" ]; then
+  echo "❌ Partner inválido o mal escrito: '$PARTNER'"
+  echo "Partners válidos: ${!PARTNER_TARGET_MAP[@]}"
+  exit 1
+fi
+
 SCHEME="$TARGET"
 APP_NAME="$TARGET"
 IPA_NAME="${PARTNER}.ipa"
 BUILD_DIR="build"
 
-# 🚨 Validar partner
-if [ -z "$TARGET" ]; then
-  echo "❌ Partner inválido: '$PARTNER'"
-  echo "Partners disponibles: ${!PARTNER_TARGET_MAP[@]}"
+# 🧪 Confirmar valores asignados
+echo "🔎 Partner=$PARTNER → Target=$TARGET → Scheme=$SCHEME"
+echo "🔎 Configuración: Environment=$ENVIRONMENT | Workspace=$WORKSPACE"
+
+# 🔐 Abortamos si SCHEME está vacío
+if [ -z "$SCHEME" ]; then
+  echo "❌ ERROR: SCHEME está vacío. Abortando para evitar fallback al scheme activo."
   exit 1
 fi
 
-# ✅ Validar que el scheme exista en el workspace
+# ✅ Validar que el scheme exista
 echo "🔍 Verificando que '$SCHEME' exista en $WORKSPACE..."
 if ! xcodebuild -workspace "$WORKSPACE" -list | grep -q "^[[:space:]]*$SCHEME$"; then
   echo "❌ El scheme '$SCHEME' no existe en $WORKSPACE."
   exit 1
 fi
 
-# 🧼 Limpiar
+# 🧼 Limpiar build anterior
 echo "🧹 Limpiando build anterior..."
 rm -rf "$BUILD_DIR"
 
-# 🧪 Mostrar configuración usada
-echo "🧪 Ejecutando build con:"
-echo "  Workspace: $WORKSPACE"
-echo "  Scheme:    $SCHEME"
-echo "  Target:    $TARGET"
-echo "  Config:    $ENVIRONMENT"
-
-# ⚙️ Compilar sin firmar
+# ⚙️ Compilar sin firma
+echo "⚙️ Compilando sin firma..."
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
@@ -79,13 +84,13 @@ xcodebuild \
   CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
   build
 
-# ❌ Cortar si falla la build
+# ❌ Cortar si la build falla
 if [ $? -ne 0 ]; then
   echo "❌ Error: Falló la compilación. Abortando."
   exit 1
 fi
 
-# ✅ Validar que se haya generado el .app
+# ✅ Validar que .app fue generado
 APP_PATH="$BUILD_DIR/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then
   echo "❌ No se encontró $APP_NAME.app en $BUILD_DIR"
@@ -99,7 +104,7 @@ if [ -z "$VERSION" ]; then
   echo "⚠️ No se pudo leer CFBundleShortVersionString, usando 'unknown'"
 fi
 
-# 📁 Ruta de artefactos en el escritorio
+# 📁 Carpeta en el escritorio
 ARTIFACTS_DIR="$HOME/Desktop/${PARTNER}-${VERSION}-${ENVIRONMENT}"
 README_PATH="$ARTIFACTS_DIR/README.txt"
 mkdir -p "$ARTIFACTS_DIR"
@@ -171,4 +176,3 @@ cd - > /dev/null
 open "$ARTIFACTS_DIR"
 
 echo "✅ Listo: $ARTIFACTS_DIR y $(basename "$ZIP_NAME") creados en tu Escritorio."
-
