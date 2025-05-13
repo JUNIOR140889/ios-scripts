@@ -57,13 +57,12 @@ APP_NAME="$TARGET"
 IPA_NAME="${PARTNER}.ipa"
 BUILD_DIR="build"
 
-# 🧪 Log de ejecución
 echo "🔎 Partner=$PARTNER → Target=$TARGET → Scheme=$SCHEME"
 echo "🔎 Configuración: Environment=$ENVIRONMENT | Workspace=$WORKSPACE"
 
-# 🔐 Proteger contra scheme vacío
+# ❌ Cortar si el scheme está vacío
 if [ -z "$SCHEME" ]; then
-  echo "❌ ERROR: SCHEME está vacío. Abortando para evitar fallback al scheme activo."
+  echo "❌ ERROR: SCHEME está vacío. Abortando."
   exit 1
 fi
 
@@ -78,6 +77,15 @@ fi
 echo "🧹 Limpiando build anterior..."
 rm -rf "$BUILD_DIR"
 
+# 🌍 Mostrar entorno
+export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+
+echo "🧪 whoami: $(whoami)"
+echo "🧪 uname: $(uname -a)"
+echo "🧪 DEVELOPER_DIR: $DEVELOPER_DIR"
+echo "🧪 SDKROOT: $SDKROOT"
+
 # ⚙️ Compilar sin firma
 echo "⚙️ Compilando sin firma..."
 xcodebuild \
@@ -89,12 +97,17 @@ xcodebuild \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGN_STYLE=Manual \
+  PROVISIONING_PROFILE_SPECIFIER="" \
+  DEVELOPMENT_TEAM="" \
+  ONLY_ACTIVE_ARCH=NO \
   CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
-  build
+  clean build
 
-# ❌ Abortar si falla la build
+# ❌ Cortar si falla
 if [ $? -ne 0 ]; then
   echo "❌ Error: Falló la compilación. Abortando."
+  echo "📌 Consejo: Si compila en Xcode pero falla acá, revisá tu bridging header, imports condicionales o dependencias que requieren firma."
   exit 1
 fi
 
@@ -137,11 +150,11 @@ Este archivo .ipa ha sido generado SIN FIRMA para que el equipo de $PARTNER lo f
 
 ⚠️ IMPORTANTE:
 - Este .ipa no está firmado.
-- No puede instalarse en dispositivos ni subirse a App Store Connect hasta que sea firmado correctamente.
+- No puede instalarse ni subirse a App Store Connect hasta que sea firmado correctamente.
 
 🔏 ¿CÓMO FIRMAR ESTE .IPA?
 
-Usando Fastlane:
+Fastlane:
 fastlane resign \\
   --ipa $IPA_NAME \\
   --signing_identity "iPhone Distribution: Nombre del equipo" \\
