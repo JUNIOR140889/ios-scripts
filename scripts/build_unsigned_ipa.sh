@@ -1,4 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# 🔐 Validar versión mínima de Bash
+if [ -z "$BASH_VERSION" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+  echo "❌ Este script requiere Bash versión 4 o superior."
+  echo "👉 Instalalo con: brew install bash"
+  echo "👉 Ejecutalo así: /usr/local/bin/bash build_unsigned_ipa.sh <Partner> <Environment>"
+  exit 1
+fi
 
 # 🎯 MAPPING Partner -> Target/Scheme/AppName
 declare -A PARTNER_TARGET_MAP=(
@@ -36,7 +44,7 @@ PARTNER="$1"
 ENVIRONMENT="$2"
 WORKSPACE="GoPagos.xcworkspace"
 
-# 🔐 Validar existencia del partner en el mapping
+# 🔐 Validar partner
 TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
 if [ -z "$TARGET" ]; then
   echo "❌ Partner inválido o mal escrito: '$PARTNER'"
@@ -49,17 +57,17 @@ APP_NAME="$TARGET"
 IPA_NAME="${PARTNER}.ipa"
 BUILD_DIR="build"
 
-# 🧪 Confirmar valores asignados
+# 🧪 Log de ejecución
 echo "🔎 Partner=$PARTNER → Target=$TARGET → Scheme=$SCHEME"
 echo "🔎 Configuración: Environment=$ENVIRONMENT | Workspace=$WORKSPACE"
 
-# 🔐 Abortamos si SCHEME está vacío
+# 🔐 Proteger contra scheme vacío
 if [ -z "$SCHEME" ]; then
   echo "❌ ERROR: SCHEME está vacío. Abortando para evitar fallback al scheme activo."
   exit 1
 fi
 
-# ✅ Validar que el scheme exista
+# ✅ Validar existencia del scheme
 echo "🔍 Verificando que '$SCHEME' exista en $WORKSPACE..."
 if ! xcodebuild -workspace "$WORKSPACE" -list | grep -q "^[[:space:]]*$SCHEME$"; then
   echo "❌ El scheme '$SCHEME' no existe en $WORKSPACE."
@@ -84,7 +92,7 @@ xcodebuild \
   CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
   build
 
-# ❌ Cortar si la build falla
+# ❌ Abortar si falla la build
 if [ $? -ne 0 ]; then
   echo "❌ Error: Falló la compilación. Abortando."
   exit 1
@@ -104,7 +112,7 @@ if [ -z "$VERSION" ]; then
   echo "⚠️ No se pudo leer CFBundleShortVersionString, usando 'unknown'"
 fi
 
-# 📁 Carpeta en el escritorio
+# 📁 Carpeta en Escritorio
 ARTIFACTS_DIR="$HOME/Desktop/${PARTNER}-${VERSION}-${ENVIRONMENT}"
 README_PATH="$ARTIFACTS_DIR/README.txt"
 mkdir -p "$ARTIFACTS_DIR"
@@ -124,46 +132,25 @@ cat << EOF > "$README_PATH"
 
 Este archivo .ipa ha sido generado SIN FIRMA para que el equipo de $PARTNER lo firme y distribuya con sus propios certificados y perfiles de aprovisionamiento.
 
----
-
 📦 ARCHIVO ENTREGADO:
-
 - $IPA_NAME
 
-Este archivo contiene el binario de la app en formato estándar (.ipa), empaquetado sin firma digital.
-
----
-
 ⚠️ IMPORTANTE:
-
 - Este .ipa no está firmado.
 - No puede instalarse en dispositivos ni subirse a App Store Connect hasta que sea firmado correctamente.
-- El uso de este binario sin firma es bajo responsabilidad del partner.
-
----
 
 🔏 ¿CÓMO FIRMAR ESTE .IPA?
 
-Opción 1: Usando Fastlane
-
-\`\`\`bash
+Usando Fastlane:
 fastlane resign \\
   --ipa $IPA_NAME \\
   --signing_identity "iPhone Distribution: Nombre del equipo" \\
   --provisioning_profile "ruta/al/profile.mobileprovision"
-\`\`\`
 
-Opción 2: Manual con Xcode (Avanzado)
-
+Manual:
 1. Cambiar extensión a .zip y descomprimir
 2. Firmar $APP_NAME.app con codesign
 3. Reempaquetar como .ipa
-
----
-
-📬 Soporte:
-
-Contactar al equipo técnico que entregó el artefacto si tienen dudas sobre la firma o el uso.
 EOF
 
 # 🗜️ Comprimir .zip
