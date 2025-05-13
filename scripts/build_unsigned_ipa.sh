@@ -42,34 +42,30 @@ fi
 
 PARTNER="$1"
 ENVIRONMENT="$2"
-WORKSPACE="GoPagos.xcworkspace"
+TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
+SCHEME="$TARGET"
+APP_NAME="$TARGET"
+IPA_NAME="${PARTNER}.ipa"
+BUILD_DIR="build"
 
 # 🔐 Validar partner
-TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
 if [ -z "$TARGET" ]; then
   echo "❌ Partner inválido o mal escrito: '$PARTNER'"
   echo "Partners válidos: ${!PARTNER_TARGET_MAP[@]}"
   exit 1
 fi
 
-SCHEME="$TARGET"
-APP_NAME="$TARGET"
-IPA_NAME="${PARTNER}.ipa"
-BUILD_DIR="build"
-
-echo "🔎 Partner=$PARTNER → Target=$TARGET → Scheme=$SCHEME"
-echo "🔎 Configuración: Environment=$ENVIRONMENT | Workspace=$WORKSPACE"
-
-# ❌ Cortar si el scheme está vacío
-if [ -z "$SCHEME" ]; then
-  echo "❌ ERROR: SCHEME está vacío. Abortando."
-  exit 1
+# ⚙️ Detectar si se usa .xcodeproj o .xcworkspace
+if [ -f "GoPagos.xcodeproj" ]; then
+  PROJECT_TYPE="-project GoPagos.xcodeproj"
+else
+  PROJECT_TYPE="-workspace GoPagos.xcworkspace"
 fi
 
-# ✅ Validar existencia del scheme
-echo "🔍 Verificando que '$SCHEME' exista en $WORKSPACE..."
-if ! xcodebuild -workspace "$WORKSPACE" -list | grep -q "^[[:space:]]*$SCHEME$"; then
-  echo "❌ El scheme '$SCHEME' no existe en $WORKSPACE."
+# ✅ Validar scheme
+echo "🔍 Verificando que '$SCHEME' exista..."
+if ! xcodebuild $PROJECT_TYPE -list | grep -q "^[[:space:]]*$SCHEME$"; then
+  echo "❌ El scheme '$SCHEME' no existe en el proyecto/workspace."
   exit 1
 fi
 
@@ -77,10 +73,11 @@ fi
 echo "🧹 Limpiando build anterior..."
 rm -rf "$BUILD_DIR"
 
-# 🌍 Mostrar entorno
+# 🌍 Entorno explícito
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
 
+echo "🔎 Partner=$PARTNER → Scheme=$SCHEME → Env=$ENVIRONMENT"
 echo "🧪 whoami: $(whoami)"
 echo "🧪 uname: $(uname -a)"
 echo "🧪 DEVELOPER_DIR: $DEVELOPER_DIR"
@@ -89,7 +86,7 @@ echo "🧪 SDKROOT: $SDKROOT"
 # ⚙️ Compilar sin firma
 echo "⚙️ Compilando sin firma..."
 xcodebuild \
-  -workspace "$WORKSPACE" \
+  $PROJECT_TYPE \
   -scheme "$SCHEME" \
   -configuration "$ENVIRONMENT" \
   -sdk iphoneos \
@@ -100,32 +97,33 @@ xcodebuild \
   CODE_SIGN_STYLE=Manual \
   PROVISIONING_PROFILE_SPECIFIER="" \
   DEVELOPMENT_TEAM="" \
+  GCC_PREPROCESSOR_DEFINITIONS="DEBUG=1" \
   ONLY_ACTIVE_ARCH=NO \
   CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
   clean build
 
-# ❌ Cortar si falla
+# ❌ Si falla
 if [ $? -ne 0 ]; then
   echo "❌ Error: Falló la compilación. Abortando."
-  echo "📌 Consejo: Si compila en Xcode pero falla acá, revisá tu bridging header, imports condicionales o dependencias que requieren firma."
+  echo "📌 Consejo: Si compila en Xcode pero falla acá, revisá el Bridging Header, defines, y la firma."
   exit 1
 fi
 
-# ✅ Validar que .app fue generado
+# ✅ Validar .app generado
 APP_PATH="$BUILD_DIR/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then
   echo "❌ No se encontró $APP_NAME.app en $BUILD_DIR"
   exit 1
 fi
 
-# 🔢 Obtener versión desde Info.plist
+# 🔢 Obtener versión
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Info.plist" 2>/dev/null)
 if [ -z "$VERSION" ]; then
   VERSION="unknown"
   echo "⚠️ No se pudo leer CFBundleShortVersionString, usando 'unknown'"
 fi
 
-# 📁 Carpeta en Escritorio
+# 📁 Carpeta de salida
 ARTIFACTS_DIR="$HOME/Desktop/${PARTNER}-${VERSION}-${ENVIRONMENT}"
 README_PATH="$ARTIFACTS_DIR/README.txt"
 mkdir -p "$ARTIFACTS_DIR"
