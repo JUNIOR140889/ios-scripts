@@ -6,24 +6,20 @@ PARTNER=$1
 ENVIRONMENT=$2
 
 if [ -z "$PARTNER" ] || [ -z "$ENVIRONMENT" ]; then
-  echo "❌ Debe indicar el nombre del partner y el environment. Ej: UalaBis Release"
+  echo "❌ Debe indicar el nombre del partner y el ambiente (ej: UalaBis Release)"
   exit 1
 fi
 
 SCHEME="$PARTNER"
-WORKSPACE="GoPagos.xcworkspace"
 CONFIGURATION="$ENVIRONMENT"
-DERIVED_DATA_PATH="./DerivedData"
-OUTPUT_DIR="./output/$PARTNER/$ENVIRONMENT"
-IPA_NAME="$PARTNER-unsigned.ipa"
+WORKSPACE="GoPagos.xcworkspace"
 
-echo "🚀 Generando build unsigned para $PARTNER [$ENVIRONMENT]..."
+DERIVED_DATA_PATH=$(mktemp -d)
+BUILD_PATH="$DERIVED_DATA_PATH/Build/Products/$CONFIGURATION-iphoneos"
+APP_NAME="$PARTNER"
+APP_PATH="$BUILD_PATH/$APP_NAME.app"
 
-# Limpiar cualquier build anterior
-rm -rf "$DERIVED_DATA_PATH"
-mkdir -p "$OUTPUT_DIR"
-
-# Construir sin firma
+echo "🔨 Compilando sin firma..."
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
@@ -33,22 +29,30 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
-  build
+  build | xcpretty
 
-# Verificar que el .app existe
-APP_PATH="$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
 if [ ! -d "$APP_PATH" ]; then
   echo "❌ .app no encontrado en $APP_PATH"
   exit 1
 fi
 
-# Empaquetar .ipa unsigned
-cd "$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos"
+echo "📦 Empaquetando .ipa sin firma..."
+
+# Obtener versión desde Info.plist
+INFO_PLIST="$APP_PATH/Info.plist"
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
+
+# Crear carpeta de salida
+OUTPUT_DIR=~/Desktop/"$PARTNER IPA's Productivos"
+mkdir -p "$OUTPUT_DIR"
+IPA_PATH="$OUTPUT_DIR/$PARTNER-$VERSION.ipa"
+
+# Crear Payload y empaquetar
+cd "$BUILD_PATH"
 mkdir -p Payload
-cp -r "${SCHEME}.app" Payload/
-zip -r "$IPA_NAME" Payload > /dev/null
-mv "$IPA_NAME" "../../../../$OUTPUT_DIR/"
-cd - > /dev/null
+cp -r "$APP_NAME.app" Payload/
+zip -r "$IPA_PATH" Payload > /dev/null
+rm -rf Payload
 
-echo "✅ .ipa sin firmar generado: $OUTPUT_DIR/$IPA_NAME"
-
+echo "✅ IPA sin firmar generado en:"
+echo "$IPA_PATH"
