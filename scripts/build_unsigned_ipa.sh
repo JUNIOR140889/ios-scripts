@@ -1,25 +1,26 @@
 #!/bin/bash
 
-# Verifica argumentos
-PARTNER=$1
-ENVIRONMENT=$2
+# Argumentos: PARTNER y ENVIRONMENT
+PARTNER="$1"
+ENVIRONMENT="$2"
 
 if [[ -z "$PARTNER" || -z "$ENVIRONMENT" ]]; then
-  echo "❌ Debe indicar el nombre del partner (ej: UalaBis) y el ambiente (Release, Debug, Test, Preprod)"
+  echo "❌ Debe indicar el nombre del partner (ej: UalaBis) y el environment (Release, Debug, etc)."
   exit 1
 fi
 
 SCHEME="$PARTNER"
-WORKSPACE="GoPagos.xcworkspace"
 CONFIGURATION="$ENVIRONMENT"
+WORKSPACE="GoPagos.xcworkspace"
 
-# Ruta temporal
-BUILD_DIR=$(mktemp -d)
+# Ruta base del DerivedData
+DERIVED_DATA_PATH="~/Library/Developer/Xcode/DerivedData"
+
+# Clean build path antes de compilar
+BUILD_PATH=$(mktemp -d)
 
 echo "📦 Compilando $SCHEME ($CONFIGURATION)..."
 
-# Ejecuta build sin firma
-set -o pipefail
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
@@ -28,41 +29,43 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
-  BUILD_DIR="$BUILD_DIR" \
-  | xcpretty --progress
+  BUILD_DIR="$BUILD_PATH" \
+  build
 
-APP_PATH="$BUILD_DIR/Release-iphoneos/$SCHEME.app"
+APP_PATH=$(find "$BUILD_PATH" -type d -name "$SCHEME.app" | head -n 1)
 
 if [[ ! -d "$APP_PATH" ]]; then
-  echo "❌ .app no encontrado en $APP_PATH"
+  echo "❌ No se encontró el .app compilado. Abortando."
   exit 1
 fi
 
-# Extrae la versión del build
+# Obtener el valor de CFBundleVersion (build)
 INFO_PLIST="$APP_PATH/Info.plist"
-BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST" 2>/dev/null)
+BUILD_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$INFO_PLIST" 2>/dev/null)
 
-if [[ -z "$BUILD_NUMBER" ]]; then
-  echo "❌ No se pudo obtener el CFBundleVersion desde $INFO_PLIST"
+if [[ -z "$BUILD_VERSION" ]]; then
+  echo "❌ No se pudo leer CFBundleVersion desde el Info.plist"
   exit 1
 fi
 
-echo "🔢 Build encontrado: $BUILD_NUMBER"
+# Ruta final del .ipa
+OUTPUT_DIR=~/Desktop/UNSIGNED-IPA/$CONFIGURATION
+OUTPUT_PATH="$OUTPUT_DIR/${PARTNER}-${BUILD_VERSION}.ipa"
 
-# Prepara estructura Payload y empaqueta
-PAYLOAD_DIR="$BUILD_DIR/Payload"
-mkdir -p "$PAYLOAD_DIR"
-cp -r "$APP_PATH" "$PAYLOAD_DIR/"
+mkdir -p "$OUTPUT_DIR"
 
-IPA_OUTPUT_DIR=~/Desktop/UNSIGNED-IPA/$ENVIRONMENT
-mkdir -p "$IPA_OUTPUT_DIR"
+# Generar IPA
+TEMP_PAYLOAD=$(mktemp -d)
+mkdir -p "$TEMP_PAYLOAD/Payload"
+cp -r "$APP_PATH" "$TEMP_PAYLOAD/Payload"
 
-IPA_PATH="$IPA_OUTPUT_DIR/${PARTNER}-${BUILD_NUMBER}.ipa"
-cd "$BUILD_DIR"
-zip -qr "$IPA_PATH" Payload
+cd "$TEMP_PAYLOAD"
+zip -qr "$OUTPUT_PATH" Payload
+cd - > /dev/null
 
-echo "✅ IPA sin firmar generado en: $IPA_PATH"
+# Limpieza
+rm -rf "$TEMP_PAYLOAD"
+rm -rf "$BUILD_PATH"
 
-# Limpieza opcional (mantener si querés debuggear)
-# rm -rf "$BUILD_DIR"
-
+echo "✅ IPA sin firma generada:"
+echo "$OUTPUT_PATH"
