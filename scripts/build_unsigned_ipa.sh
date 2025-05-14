@@ -1,59 +1,78 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-# VALIDACIÓN DE INPUT
-PARTNER=$1
-ENVIRONMENT=$2
+# 🧩 Verificar dependencias
+if ! command -v xcpretty &> /dev/null; then
+  echo "🛠  Instalando xcpretty..."
+  if ! command -v gem &> /dev/null; then
+    echo "❌ RubyGems (gem) no está instalado. Instálalo para continuar."
+    exit 1
+  fi
+  sudo gem install xcpretty
+fi
 
-if [ -z "$PARTNER" ] || [ -z "$ENVIRONMENT" ]; then
-  echo "❌ Debes indicar el nombre del partner y el ambiente. Ejemplo:"
-  echo "bash build_unsigned_ipa.sh UalaBis Release"
+# 📥 Validación de argumentos
+if [[ $# -ne 2 ]]; then
+  echo "❌ Debe indicar el nombre del partner y el entorno (ej: UalaBis Release)"
   exit 1
 fi
 
-# CONFIGURACIÓN
+PARTNER=$1
+ENVIRONMENT=$2
+
 WORKSPACE="GoPagos.xcworkspace"
 SCHEME="$PARTNER"
 CONFIGURATION="$ENVIRONMENT"
-DERIVED_DATA_PATH=$(mktemp -d)
 
-echo "📦 Compilando $PARTNER ($ENVIRONMENT)..."
+DERIVED_DATA=$(mktemp -d)
+BUILD_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION-iphoneos"
 
-# BUILD SIN FIRMA
+echo "📦 Compilando $PARTNER ($CONFIGURATION)..."
+
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
   -sdk iphoneos \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
-  build > /dev/null
+  -derivedDataPath "$DERIVED_DATA" \
+  | xcpretty
 
-APP_PATH="$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
+APP_PATH=$(find "$BUILD_PATH" -name "$PARTNER.app" -type d | head -n 1)
 
 if [ ! -d "$APP_PATH" ]; then
-  echo "❌ .app no encontrado en $APP_PATH"
+  echo "❌ .app no encontrado en $BUILD_PATH"
   exit 1
 fi
 
-# OBTENER VERSIÓN DEL .app
-INFO_PLIST="${APP_PATH}/Info.plist"
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$INFO_PLIST" 2>/dev/null || echo "0.0.0")
+# 🏷 Extraer versión desde Info.plist del .app
+PLIST_PATH="$APP_PATH/Info.plist"
+if [ ! -f "$PLIST_PATH" ]; then
+  echo "❌ No se encontró Info.plist en el .app"
+  exit 1
+fi
 
-# GENERAR .IPA
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH" 2>/dev/null || echo "0.0.0")
+
+# 📁 Crear carpeta de destino
+OUTPUT_DIR=~/Desktop/UNSIGNED-IPA/$ENVIRONMENT
+mkdir -p "$OUTPUT_DIR"
+
+# 📦 Empaquetar el .ipa sin firmar
 PAYLOAD_DIR=$(mktemp -d)
-mkdir -p "$PAYLOAD_DIR/Payload"
-cp -r "$APP_PATH" "$PAYLOAD_DIR/Payload/"
+cp -R "$APP_PATH" "$PAYLOAD_DIR/Payload"
+OUTPUT_NAME="$PARTNER-$VERSION.ipa"
+ZIP_PATH="$OUTPUT_DIR/$OUTPUT_NAME"
 
-IPA_NAME="${PARTNER}-${VERSION}.ipa"
-OUTPUT_FOLDER=~/Desktop/UNSIGNED-IPA/${ENVIRONMENT}
-mkdir -p "$OUTPUT_FOLDER"
+echo "📦 Generando .ipa: $ZIP_PATH..."
 cd "$PAYLOAD_DIR"
-zip -r "$OUTPUT_FOLDER/$IPA_NAME" Payload > /dev/null
-cd - > /dev/null
+zip -qry "$ZIP_PATH" Payload
 
-echo "✅ IPA sin firmar generada en:"
-echo "$OUTPUT_FOLDER/$IPA_NAME"
+echo "✅ IPA generada exitosamente: $ZIP_PATH"
+
+# 🧹 Cleanup
+rm -rf "$PAYLOAD_DIR"
+rm -rf "$DERIVED_DATA"
