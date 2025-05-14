@@ -41,7 +41,7 @@ if [ "$1" == "--clean" ]; then
 fi
 
 # ✅ Forzar uso de Xcode 16.2
-export DEVELOPER_DIR="/Applications/Xcode-16.2.app/Contents/Developer"
+export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 if [ ! -x "$DEVELOPER_DIR/usr/bin/xcodebuild" ]; then
   echo "❌ Xcode 16.2 no está disponible en $DEVELOPER_DIR"
   exit 1
