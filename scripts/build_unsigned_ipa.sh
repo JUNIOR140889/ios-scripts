@@ -1,51 +1,54 @@
 #!/bin/bash
 
-set -euo pipefail
+set -e
 
-PARTNER_NAME=${1:?Debe indicar el nombre del partner (ej: UalaBis)}
-CONFIGURATION=${2:?Debe indicar el nombre del ambiente (ej: Release, Debug, Preprod, Test)}
+PARTNER=$1
+ENVIRONMENT=$2
 
+if [ -z "$PARTNER" ] || [ -z "$ENVIRONMENT" ]; then
+  echo "❌ Debe indicar el nombre del partner y el environment. Ej: UalaBis Release"
+  exit 1
+fi
+
+SCHEME="$PARTNER"
 WORKSPACE="GoPagos.xcworkspace"
-SCHEME="$PARTNER_NAME"
-IPA_NAME="${PARTNER_NAME}.ipa"
+CONFIGURATION="$ENVIRONMENT"
+DERIVED_DATA_PATH="./DerivedData"
+OUTPUT_DIR="./output/$PARTNER/$ENVIRONMENT"
+IPA_NAME="$PARTNER-unsigned.ipa"
 
-DERIVED_DATA=$(mktemp -d)
-BUILD_DIR="$DERIVED_DATA/Build/Products/${CONFIGURATION}-iphoneos"
-APP_PATH="$BUILD_DIR/${PARTNER_NAME}.app"
+echo "🚀 Generando build unsigned para $PARTNER [$ENVIRONMENT]..."
 
-echo "▶️ Building $SCHEME ($CONFIGURATION) without code signing..."
+# Limpiar cualquier build anterior
+rm -rf "$DERIVED_DATA_PATH"
+mkdir -p "$OUTPUT_DIR"
 
+# Construir sin firma
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
   -sdk iphoneos \
+  -derivedDataPath "$DERIVED_DATA_PATH" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
-  BUILD_DIR="$DERIVED_DATA" \
   build
 
+# Verificar que el .app existe
+APP_PATH="$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
 if [ ! -d "$APP_PATH" ]; then
-  echo "❌ .app not found at $APP_PATH"
+  echo "❌ .app no encontrado en $APP_PATH"
   exit 1
 fi
 
-echo "📦 Packaging unsigned .ipa..."
-
+# Empaquetar .ipa unsigned
+cd "$DERIVED_DATA_PATH/Build/Products/${CONFIGURATION}-iphoneos"
 mkdir -p Payload
-cp -r "$APP_PATH" Payload/
-zip -qry "$IPA_NAME" Payload
-rm -rf Payload
+cp -r "${SCHEME}.app" Payload/
+zip -r "$IPA_NAME" Payload > /dev/null
+mv "$IPA_NAME" "../../../../$OUTPUT_DIR/"
+cd - > /dev/null
 
-# Extraer versión desde Info.plist
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PATH/Info.plist")
+echo "✅ .ipa sin firmar generado: $OUTPUT_DIR/$IPA_NAME"
 
-# Crear carpeta destino
-DEST_DIR="scripts/${PARTNER_NAME}/${CONFIGURATION}"
-mkdir -p "$DEST_DIR"
-
-FINAL_NAME="${PARTNER_NAME}-${VERSION}.zip"
-mv "$IPA_NAME" "$DEST_DIR/$FINAL_NAME"
-
-echo "✅ IPA sin firmar generada en: $DEST_DIR/$FINAL_NAME"
