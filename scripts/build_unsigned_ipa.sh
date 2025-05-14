@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 
+# 🧩 Forzar Xcode 16.2
+export DEVELOPER_DIR="/Applications/Xcode-16.2.app/Contents/Developer"
+
+# Validar bash
 if [ -z "$BASH_VERSION" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
   echo "❌ Este script requiere Bash 4 o superior."
   exit 1
 fi
 
+# 🎯 Mapeo Partner → Target
 declare -A PARTNER_TARGET_MAP=(
   [BPN]="BPN"
   [BancoDeChile]="BancoDeChile"
@@ -29,8 +34,19 @@ declare -A PARTNER_TARGET_MAP=(
   [compraqui]="compraqui"
 )
 
+# 🧹 Opción de limpieza forzada
+if [ "$1" == "--clean" ]; then
+  echo "🧹 Limpiando entorno (Pods, DerivedData)..."
+  rm -rf Pods/ ~/Library/Developer/Xcode/DerivedData build/
+  pod deintegrate
+  pod install
+  shift
+fi
+
+# ✅ Validar argumentos
 if [ "$#" -ne 2 ]; then
-  echo "❌ Uso: $0 <PartnerName> <Environment>"
+  echo "❌ Uso: $0 [--clean] <Partner> <Environment>"
+  echo "Ejemplo: $0 UalaBis Release"
   exit 1
 fi
 
@@ -54,21 +70,17 @@ else
   PROJECT_TYPE="-workspace GoPagos.xcworkspace"
 fi
 
-# Validar scheme
 if ! xcodebuild $PROJECT_TYPE -list | grep -q "^[[:space:]]*$SCHEME$"; then
   echo "❌ El scheme '$SCHEME' no existe."
   exit 1
 fi
 
-# Preparar entorno
-export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
 ARCHIVE_DIR="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)"
 ARCHIVE_PATH="$ARCHIVE_DIR/${APP_NAME}.xcarchive"
-
 rm -rf "$ARCHIVE_PATH"
 
-echo "📦 Archivando con xcodebuild..."
+echo "📦 Archivando $SCHEME [$ENVIRONMENT] con Xcode 16.2..."
 
 xcodebuild \
   $PROJECT_TYPE \
