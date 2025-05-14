@@ -1,35 +1,25 @@
 #!/bin/bash
 
-set -euo pipefail
-
-# 🧩 Verificar dependencias
-if ! command -v xcpretty &> /dev/null; then
-  echo "🛠  Instalando xcpretty..."
-  if ! command -v gem &> /dev/null; then
-    echo "❌ RubyGems (gem) no está instalado. Instálalo para continuar."
-    exit 1
-  fi
-  sudo gem install xcpretty
-fi
-
-# 📥 Validación de argumentos
-if [[ $# -ne 2 ]]; then
-  echo "❌ Debe indicar el nombre del partner y el entorno (ej: UalaBis Release)"
-  exit 1
-fi
-
+# Verifica argumentos
 PARTNER=$1
 ENVIRONMENT=$2
 
-WORKSPACE="GoPagos.xcworkspace"
+if [[ -z "$PARTNER" || -z "$ENVIRONMENT" ]]; then
+  echo "❌ Debe indicar el nombre del partner (ej: UalaBis) y el ambiente (Release, Debug, Test, Preprod)"
+  exit 1
+fi
+
 SCHEME="$PARTNER"
+WORKSPACE="GoPagos.xcworkspace"
 CONFIGURATION="$ENVIRONMENT"
 
-DERIVED_DATA=$(mktemp -d)
-BUILD_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION-iphoneos"
+# Ruta temporal
+BUILD_DIR=$(mktemp -d)
 
-echo "📦 Compilando $PARTNER ($CONFIGURATION)..."
+echo "📦 Compilando $SCHEME ($CONFIGURATION)..."
 
+# Ejecuta build sin firma
+set -o pipefail
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
@@ -38,41 +28,41 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
-  -derivedDataPath "$DERIVED_DATA" \
-  | xcpretty --progress
+  BUILD_DIR="$BUILD_DIR" \
+  | xcpretty
 
-APP_PATH=$(find "$BUILD_PATH" -name "$PARTNER.app" -type d | head -n 1)
+APP_PATH="$BUILD_DIR/Release-iphoneos/$SCHEME.app"
 
-if [ ! -d "$APP_PATH" ]; then
-  echo "❌ .app no encontrado en $BUILD_PATH"
+if [[ ! -d "$APP_PATH" ]]; then
+  echo "❌ .app no encontrado en $APP_PATH"
   exit 1
 fi
 
-# 🏷 Extraer versión desde Info.plist del .app
-PLIST_PATH="$APP_PATH/Info.plist"
-if [ ! -f "$PLIST_PATH" ]; then
-  echo "❌ No se encontró Info.plist en el .app"
+# Extrae la versión del build
+INFO_PLIST="$APP_PATH/Info.plist"
+BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST" 2>/dev/null)
+
+if [[ -z "$BUILD_NUMBER" ]]; then
+  echo "❌ No se pudo obtener el CFBundleVersion desde $INFO_PLIST"
   exit 1
 fi
 
-VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH" 2>/dev/null || echo "0.0.0")
+echo "🔢 Build encontrado: $BUILD_NUMBER"
 
-# 📁 Crear carpeta de destino
-OUTPUT_DIR=~/Desktop/UNSIGNED-IPA/$ENVIRONMENT
-mkdir -p "$OUTPUT_DIR"
+# Prepara estructura Payload y empaqueta
+PAYLOAD_DIR="$BUILD_DIR/Payload"
+mkdir -p "$PAYLOAD_DIR"
+cp -r "$APP_PATH" "$PAYLOAD_DIR/"
 
-# 📦 Empaquetar el .ipa sin firmar
-PAYLOAD_DIR=$(mktemp -d)
-cp -R "$APP_PATH" "$PAYLOAD_DIR/Payload"
-OUTPUT_NAME="$PARTNER-$VERSION.ipa"
-ZIP_PATH="$OUTPUT_DIR/$OUTPUT_NAME"
+IPA_OUTPUT_DIR=~/Desktop/UNSIGNED-IPA/$ENVIRONMENT
+mkdir -p "$IPA_OUTPUT_DIR"
 
-echo "📦 Generando .ipa: $ZIP_PATH..."
-cd "$PAYLOAD_DIR"
-zip -qry "$ZIP_PATH" Payload
+IPA_PATH="$IPA_OUTPUT_DIR/${PARTNER}-${BUILD_NUMBER}.ipa"
+cd "$BUILD_DIR"
+zip -qr "$IPA_PATH" Payload
 
-echo "✅ IPA generada exitosamente: $ZIP_PATH"
+echo "✅ IPA sin firmar generado en: $IPA_PATH"
 
-# 🧹 Cleanup
-rm -rf "$PAYLOAD_DIR"
-rm -rf "$DERIVED_DATA"
+# Limpieza opcional (mantener si querés debuggear)
+# rm -rf "$BUILD_DIR"
+
