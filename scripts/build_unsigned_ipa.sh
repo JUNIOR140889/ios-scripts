@@ -39,7 +39,7 @@ xcodebuild \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
   -derivedDataPath "$DERIVED_DATA" \
-  | xcpretty
+  | xcpretty --progress
 
 APP_PATH=$(find "$BUILD_PATH" -name "$PARTNER.app" -type d | head -n 1)
 
