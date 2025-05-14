@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 
-# 🧩 Forzar Xcode 16.2
-export DEVELOPER_DIR="/Applications/Xcode-16.2.app/Contents/Developer"
-
 # Validar bash
 if [ -z "$BASH_VERSION" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
   echo "❌ Este script requiere Bash 4 o superior."
@@ -42,6 +39,9 @@ if [ "$1" == "--clean" ]; then
   pod install
   shift
 fi
+
+# 🧩 Forzar Xcode 16.2
+export DEVELOPER_DIR="/Applications/Xcode-16.2.app/Contents/Developer"
 
 # ✅ Validar argumentos
 if [ "$#" -ne 2 ]; then
