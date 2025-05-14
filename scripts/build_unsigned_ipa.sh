@@ -2,8 +2,6 @@
 
 if [ -z "$BASH_VERSION" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
   echo "❌ Este script requiere Bash 4 o superior."
-  echo "👉 Instalalo con: brew install bash"
-  echo "👉 Ejecutalo así: /usr/local/bin/bash build_unsigned_ipa.sh <Partner> <Environment>"
   exit 1
 fi
 
@@ -42,7 +40,6 @@ TARGET="${PARTNER_TARGET_MAP[$PARTNER]}"
 SCHEME="$TARGET"
 APP_NAME="$TARGET"
 IPA_NAME="${PARTNER}.ipa"
-BUILD_DIR="build"
 
 if [ -z "$TARGET" ]; then
   echo "❌ Partner inválido: '$PARTNER'"
@@ -50,36 +47,35 @@ if [ -z "$TARGET" ]; then
   exit 1
 fi
 
+# Proyecto o workspace
 if [ -f "GoPagos.xcodeproj" ]; then
   PROJECT_TYPE="-project GoPagos.xcodeproj"
 else
   PROJECT_TYPE="-workspace GoPagos.xcworkspace"
 fi
 
+# Validar scheme
 if ! xcodebuild $PROJECT_TYPE -list | grep -q "^[[:space:]]*$SCHEME$"; then
   echo "❌ El scheme '$SCHEME' no existe."
   exit 1
 fi
 
-rm -rf "$BUILD_DIR"
-
+# Preparar entorno
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+ARCHIVE_DIR="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)"
+ARCHIVE_PATH="$ARCHIVE_DIR/${APP_NAME}.xcarchive"
 
-echo "🔎 Compilando $SCHEME [$ENVIRONMENT] → $APP_NAME.ipa"
-echo "🧪 whoami: $(whoami)"
-echo "🧪 DEVELOPER_DIR: $DEVELOPER_DIR"
-echo "🧪 SDKROOT: $SDKROOT"
+rm -rf "$ARCHIVE_PATH"
 
-# Opcional y seguro aunque no uses SPM
-xcodebuild -resolvePackageDependencies -scheme "$SCHEME" $PROJECT_TYPE -configuration "$ENVIRONMENT"
+echo "📦 Archivando con xcodebuild..."
 
 xcodebuild \
   $PROJECT_TYPE \
   -scheme "$SCHEME" \
   -configuration "$ENVIRONMENT" \
-  -sdk iphoneos \
   -destination 'generic/platform=iOS' \
+  -archivePath "$ARCHIVE_PATH" \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
@@ -91,17 +87,16 @@ xcodebuild \
   ENABLE_BITCODE=NO \
   ENABLE_TESTABILITY=YES \
   ENABLE_PARALLEL_BUILD=YES \
-  CONFIGURATION_BUILD_DIR="$BUILD_DIR" \
-  clean build
+  clean archive
 
 if [ $? -ne 0 ]; then
-  echo "❌ Error: Falló la compilación. Abortando."
+  echo "❌ Error: Falló el archive. Abortando."
   exit 1
 fi
 
-APP_PATH="$BUILD_DIR/$APP_NAME.app"
+APP_PATH="$ARCHIVE_PATH/Products/Applications/$APP_NAME.app"
 if [ ! -d "$APP_PATH" ]; then
-  echo "❌ No se encontró $APP_NAME.app en $BUILD_DIR"
+  echo "❌ No se encontró $APP_NAME.app en el archive."
   exit 1
 fi
 
@@ -117,24 +112,21 @@ cp -r "$APP_PATH" Payload/
 cd Payload
 zip -r "../$ARTIFACTS_DIR/$IPA_NAME" . > /dev/null
 cd ..
-rm -rf Payload "$BUILD_DIR"
+rm -rf Payload
 
 cat << EOF > "$README_PATH"
-# UNSIGNED IPA
+# UNSIGNED IPA - $PARTNER ($ENVIRONMENT)
 
-Este .ipa fue generado sin firmar para que el equipo de $PARTNER lo firme con sus propios certificados.
+Este .ipa fue generado SIN FIRMA para que el equipo de $PARTNER lo firme con sus propios certificados.
 
-- Nombre: $IPA_NAME
-- Versión: $VERSION
-- Entorno: $ENVIRONMENT
+Versión: $VERSION
+Entorno: $ENVIRONMENT
 
 Firmar con Fastlane:
-fastlane resign --ipa $IPA_NAME --signing_identity "..." --provisioning_profile "..."
-
-Firmado manual:
-1. Cambiar extensión a .zip y descomprimir
-2. Firmar .app con codesign
-3. Reempaquetar como .ipa
+fastlane resign \\
+  --ipa $IPA_NAME \\
+  --signing_identity "iPhone Distribution: ..." \\
+  --provisioning_profile "profile.mobileprovision"
 EOF
 
 cd "$HOME/Desktop"
@@ -143,4 +135,4 @@ cd - > /dev/null
 
 open "$ARTIFACTS_DIR"
 
-echo "✅ Listo: $ARTIFACTS_DIR y $(basename "$ARTIFACTS_DIR").zip creados en tu Escritorio."
+echo "✅ Listo: $ARTIFACTS_DIR y $(basename "$ARTIFACTS_DIR").zip"
