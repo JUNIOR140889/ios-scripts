@@ -2,57 +2,55 @@
 
 set -e
 
-PARTNER=$1
-ENVIRONMENT=$2
+PARTNER="$1"
+ENVIRONMENT="$2"
 
 if [ -z "$PARTNER" ] || [ -z "$ENVIRONMENT" ]; then
-  echo "❌ Debe indicar el nombre del partner y el ambiente (ej: UalaBis Release)"
+  echo "❌ Debes indicar el nombre del partner y el ambiente (ej: UalaBis Release)"
   exit 1
 fi
 
+WORKSPACE="GoPagos.xcworkspace"
 SCHEME="$PARTNER"
 CONFIGURATION="$ENVIRONMENT"
-WORKSPACE="GoPagos.xcworkspace"
+DERIVED_DATA="$(mktemp -d)"
 
-DERIVED_DATA_PATH=$(mktemp -d)
-BUILD_PATH="$DERIVED_DATA_PATH/Build/Products/$CONFIGURATION-iphoneos"
-APP_NAME="$PARTNER"
-APP_PATH="$BUILD_PATH/$APP_NAME.app"
+# Extraer la version del Info.plist
+PLIST_PATH=$(find . -name "Info.plist" | grep "$PARTNER" | head -n 1)
+VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$PLIST_PATH")
 
-echo "🔨 Compilando sin firma..."
+# Directorio destino final
+DEST_DIR=~/Desktop/UNSIGNED-IPA/$ENVIRONMENT
+mkdir -p "$DEST_DIR"
+OUTPUT_IPA="$DEST_DIR/${PARTNER}-${VERSION}.ipa"
+
+# Build sin firma
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
   -sdk iphoneos \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
+  -derivedDataPath "$DERIVED_DATA" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
-  build | xcpretty
+  build
+
+# Empaquetar .ipa
+APP_PATH="$DERIVED_DATA/Build/Products/${CONFIGURATION}-iphoneos/${PARTNER}.app"
 
 if [ ! -d "$APP_PATH" ]; then
-  echo "❌ .app no encontrado en $APP_PATH"
+  echo "❌ No se encontró la ruta de la app: $APP_PATH"
   exit 1
 fi
 
-echo "📦 Empaquetando .ipa sin firma..."
+cd "$DERIVED_DATA"
+mkdir Payload
+cp -r "$APP_PATH" Payload/
+zip -r "$OUTPUT_IPA" Payload > /dev/null
 
-# Obtener versión desde Info.plist
-INFO_PLIST="$APP_PATH/Info.plist"
-VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST")
+# Limpiar
+rm -rf "$DERIVED_DATA"
 
-# Crear carpeta de salida
-OUTPUT_DIR=~/Desktop/"$PARTNER IPA's Productivos"
-mkdir -p "$OUTPUT_DIR"
-IPA_PATH="$OUTPUT_DIR/$PARTNER-$VERSION.ipa"
-
-# Crear Payload y empaquetar
-cd "$BUILD_PATH"
-mkdir -p Payload
-cp -r "$APP_NAME.app" Payload/
-zip -r "$IPA_PATH" Payload > /dev/null
-rm -rf Payload
-
-echo "✅ IPA sin firmar generado en:"
-echo "$IPA_PATH"
+# Éxito
+echo "✅ IPA sin firmar generado en: $OUTPUT_IPA"
