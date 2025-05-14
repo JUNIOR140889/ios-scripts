@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Validar bash
+# ✅ Validar bash
 if [ -z "$BASH_VERSION" ] || [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
   echo "❌ Este script requiere Bash 4 o superior."
   exit 1
@@ -40,13 +40,16 @@ if [ "$1" == "--clean" ]; then
   shift
 fi
 
-# 🧩 Forzar Xcode 16.2
+# ✅ Forzar uso de Xcode 16.2
 export DEVELOPER_DIR="/Applications/Xcode-16.2.app/Contents/Developer"
+if [ ! -x "$DEVELOPER_DIR/usr/bin/xcodebuild" ]; then
+  echo "❌ Xcode 16.2 no está disponible en $DEVELOPER_DIR"
+  exit 1
+fi
 
 # ✅ Validar argumentos
 if [ "$#" -ne 2 ]; then
   echo "❌ Uso: $0 [--clean] <Partner> <Environment>"
-  echo "Ejemplo: $0 UalaBis Release"
   exit 1
 fi
 
@@ -63,13 +66,14 @@ if [ -z "$TARGET" ]; then
   exit 1
 fi
 
-# Proyecto o workspace
+# Detectar si usar .xcodeproj o .xcworkspace
 if [ -f "GoPagos.xcodeproj" ]; then
   PROJECT_TYPE="-project GoPagos.xcodeproj"
 else
   PROJECT_TYPE="-workspace GoPagos.xcworkspace"
 fi
 
+# Validar scheme
 if ! xcodebuild $PROJECT_TYPE -list | grep -q "^[[:space:]]*$SCHEME$"; then
   echo "❌ El scheme '$SCHEME' no existe."
   exit 1
